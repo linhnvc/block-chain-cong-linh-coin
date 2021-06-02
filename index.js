@@ -13,6 +13,13 @@ class Block {
         return SHA256(this.index+this.previousHash+this.timestamp+JSON.stringify(this.data)).toString();
     }
 
+    mineBlock(dificulty){
+        while(this.hash.substring(0, dificulty) !== Array(dificulty + 1).join("0")){
+            this.hash = this.calculateHash();
+        }
+        console.log("Block mined: " + this.hash);
+    }
+
 }  
 
 
