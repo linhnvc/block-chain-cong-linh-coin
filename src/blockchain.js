@@ -1,27 +1,56 @@
 const SHA256 = require('crypto-js/sha256')
+const EC = require('elliptic').ec;
+const ec = new EC('secp256k1');
 
 
 class Transaction {
-    constructor(fromAdress, toAdress, amount) {
+    constructor(fromAdress, toAdress, amount){
         this.fromAdress = fromAdress
         this.toAdress = toAdress
         this.amount = amount
     }
+
+    calculateHash(){
+        return SHA256(this.fromAdress+this.toAdress+this.amount).toString();
+    }
+
+    signTransaction(signingKey){
+
+        if (signingKey.getPublic('hex') !== this.fromAdress){
+            throw new Error('Linh is sorry... You cannot sign transaction huhuhuhuhu...')
+        }
+
+        const hashTx = this.calculateHash();
+        const sig = signingKey.sign(hashTx, 'base64')
+        this.signature = sig.toDER('hex')
+    }
+
+    isValid(){
+        if (this.fromAdress === null) return true;
+        if (!this.signature || this.signature.length === 0){
+            throw new Error('Have no signature huhuhuhuhu...')
+        }
+        const publicKey = ec.keyFromPublic(this.fromAdress, 'hex');
+
+        return publicKey.verify(this.calculateHash(), this.signature);
+    }
+
 }
 
 
 class Block {
     constructor(timestamp, transactions, previousHash = '') {
         // this.index = index;
+        this.previousHash = previousHash;
         this.timestamp = timestamp;
         this.transactions = transactions;
-        this.previousHash = previousHash;
-        this.hash = this.calculateHash();
         this.nonce = 0;
+        this.hash = this.calculateHash();
+        
     }
 
     calculateHash() {
-        return SHA256(this.index+this.previousHash+this.timestamp+JSON.stringify(this.data)+this.nonce).toString();
+        return SHA256(this.previousHash+this.timestamp+JSON.stringify(this.transactions)+this.nonce).toString();
     }
 
     mineBlock(dificulty){
@@ -32,10 +61,20 @@ class Block {
         console.log("Block mined: " + this.hash);
     }
 
+    hasValidTransactions(){
+        for (const tx of this.transactions){
+            if (!tx.isValid()){
+                return false;
+            }
+        }
+        return true
+    }
+
+
 }  
 
 
-class BlockChain {
+class Blockchain {
     constructor() {
         this.chain = [this.createGenesisBlock()];
         this.dificulty = 2;
@@ -55,17 +94,30 @@ class BlockChain {
     //     this.chain.push(newBlock);
     // } 
     minePendingTransactions(miningRewardAdress) {
-        let block = new Block(Date.now(), this.pendingTransactions);
+
+        const rewardTx = new Transaction(null, miningRewardAdress, this.miningRewad);
+        this.pendingTransactions.push(rewardTx);
+
+        let block = new Block(Date.now(), this.pendingTransactions, this.getLatestBlock().hash);
         block.mineBlock(this.dificulty)
         console.log("Block mined successfully!")
         this.chain.push(block);
 
         this.pendingTransactions = [
-            new Transaction(null, miningRewardAdress, this.miningRewad)
+            // new Transaction(null, miningRewardAdress, this.miningRewad)
         ]
     }
 
-    createTransaction(transaction) {
+    addTransaction(transaction) {
+
+        if (!transaction.fromAdress || !transaction.toAdress){
+            throw new Error('Transaction must include from address and to address...')
+        }
+
+        if (!transaction.isValid()){
+            throw new Error('Cannot add new invalid transacton...')
+        }
+
         this.pendingTransactions.push(transaction)
     }
 
@@ -91,8 +143,12 @@ class BlockChain {
             // console.log(i, "====================")
             // console.log(currentBlock.hash)
             // console.log(currentBlock.calculateHash())
-            console.log(currentBlock.previousHash)
-            console.log(previousBlock.hash)
+            // console.log(currentBlock.previousHash)
+            // console.log(previousBlock.hash)
+
+            if (!currentBlock.hasValidTransactions()){
+                return false
+            }
 
             if (currentBlock.hash !== currentBlock.calculateHash()){
                 console.log(i, "A");
@@ -106,51 +162,18 @@ class BlockChain {
         return true;
     }
 
+
+
+
+
+
     showBlockchain(){
         console.log(this.chain)
     }
 }
 
 
+module.exports.Blockchain = Blockchain;
+module.exports.Transaction = Transaction;
 
-// console.log("LinhNVC System is creating new chain of blocks...")
-
-// // Khởi tạo chuỗi block 
-// let conglinh_coin = new BlockChain();
-// console.log("Mining block 1...")
-// conglinh_coin.addBlock(new Block(1, "30/05/2021", { amount: 5 }));
-// console.log("Mining block 2...")
-// conglinh_coin.addBlock(new Block(2, "30/05/2021", { amount: 10 }));
-// conglinh_coin.addBlock(new Block(3, "30/05/2021", { amount: 20 }));
-// conglinh_coin.addBlock(new Block(4, "30/05/2021", { amount: 100 }));
-
-// console.log("Is blockchain valid ::: " + conglinh_coin.isChainValid())
-// conglinh_coin.showBlockchain()
-
-// Kiểm tra tính ràng buộc khi dữ liệu bị thay đổi 
-// conglinh_coin.chain[3].data = { amount: 50 };
-// conglinh_coin.chain[3].hash = conglinh_coin.chain[3].calculateHash();
-// conglinh_coin.showBlockchain()
-// console.log("Is blockchain valid ::: " + conglinh_coin.isChainValid())
-// console.log(JSON.stringify(myCoin, null, 4))
-
-
-let conglinh_coin = new BlockChain();
-
-conglinh_coin.createTransaction(new Transaction('address 1', 'address 2', 100))
-conglinh_coin.createTransaction(new Transaction('address 2', 'address 1', 50))
-
-console.log('\nStarting the mine...')
-conglinh_coin.minePendingTransactions('linhnvc-address');
-console.log('\nBalance of conglinh coin is', conglinh_coin.getBalanceOfAddress('linhnvc-address'))
-
-
-console.log('\nStarting the mine again...')
-conglinh_coin.minePendingTransactions('linhnvc-address');
-console.log('\nBalance of conglinh coin is', conglinh_coin.getBalanceOfAddress('linhnvc-address'))
-
-
-
-
-
-
+ 
